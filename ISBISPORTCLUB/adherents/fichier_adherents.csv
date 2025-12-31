@@ -1,0 +1,4 @@
+ID,Nom,Prénom,Date de naissance,Téléphone,Email,Date d'inscription,Type d'abonnement,Date de fin d'abonnement,Statut,Commentaires
+ADH001,Dupont,Jean,15/05/1990,0612345678,jean.dupont@email.com,07/12/2025,Annuel,07/12/2026,Actif,
+ADH002,Martin,Marie,22/09/1985,0698765432,marie.martin@email.com,07/12/2025,Mensuel,07/01/2026,Actif,Préfère les cours du matin
+ADH003,Dubois,Pierre,03/01/1995,0601020304,pierre.dubois@email.com,07/12/2025,Trimestriel,07/03/2026,Actif,

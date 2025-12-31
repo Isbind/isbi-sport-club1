@@ -1,0 +1,4 @@
+Type,Durée (mois),Prix (XOF),Accès salles,Accès cours collectifs,Accès coach personnel
+Standard,1,15000,Oui,Non,Non
+Premium,1,20000,Oui,Oui,1 séance/mois
+VIP,1,30000,Oui,Illimité,1 séance/semaine

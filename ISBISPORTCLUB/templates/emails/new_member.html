@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Nouvel adhérent - {{ site_name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 20px 0; }
+        .logo { max-width: 200px; height: auto; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #777; }
+        .button { 
+            display: inline-block; 
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 10px 20px; 
+            text-decoration: none; 
+            border-radius: 4px; 
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ISBISPORTCLUB</h1>
+    </div>
+    
+    <div class="content">
+        <h2>Nouvel adhérent enregistré</h2>
+        
+        <p>Bonjour,</p>
+        
+        <p>Un nouvel adhérent vient de s'inscrire :</p>
+        
+        <ul>
+            <li><strong>Nom :</strong> {{ member.last_name }}</li>
+            <li><strong>Prénom :</strong> {{ member.first_name }}</li>
+            <li><strong>Téléphone :</strong> {{ member.phone }}</li>
+            <li><strong>Email :</strong> {{ member.email }}</li>
+            <li><strong>Type d'abonnement :</strong> {{ member.subscription_type }}</li>
+            <li><strong>Date de fin d'abonnement :</strong> {{ member.subscription_end_date }}</li>
+        </ul>
+        
+        <p>Vous pouvez gérer cet adhérent depuis votre tableau de bord d'administration.</p>
+        
+        <p>Cordialement,<br>L'équipe ISBISPORTCLUB</p>
+    </div>
+    
+    <div class="footer">
+        <p>© {% now "Y" %} ISBISPORTCLUB. Tous droits réservés.</p>
+        <p>Ceci est un message automatique, merci de ne pas y répondre.</p>
+    </div>
+</body>
+</html>

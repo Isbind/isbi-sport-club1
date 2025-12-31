@@ -1,0 +1,8 @@
+Jour,Horaire,Activité,Type,Coach,Salle,Places max,Inscrits,Tarif (XOF)
+Lundi,07:00-08:00,CrossFit,Standard,Jean Martin,Salle 1,15,8,1000
+Lundi,12:00-13:00,Yoga,Premium,Marie Dubois,Salle 2,12,10,2000
+Mardi,18:00-19:00,Musculation,Standard,Pierre Durand,Salle 1,20,15,1000
+Mercredi,19:00-20:00,HIIT,Premium,Jean Martin,Salle 2,15,12,2000
+Jeudi,12:30-13:30,Pilates,Premium,Marie Dubois,Salle 2,12,9,2000
+Vendredi,18:30-19:30,Boxe,Premium,Karim Benali,Salle 3,10,8,2000
+Samedi,10:00-11:30,Cardio Training,Standard,Sophie Leroy,Salle 1,20,12,1000
