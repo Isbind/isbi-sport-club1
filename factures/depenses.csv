@@ -1,0 +1,8 @@
+Date,Type de dépense,Description,Montant (XOF),Méthode de paiement,Statut,Facture N°
+01/12/2025,Électricité,Facture mensuelle SONABEL,125000,VIREMENT,Payé,FACT-2025-1201
+01/12/2025,Internet,Abonnement internet,50000,VIREMENT,Payé,FACT-2025-1202
+05/12/2025,Femme de ménage,Salaire décembre,150000,ESPÈCES,Payé,SAL-2025-1201
+05/12/2025,Gérant,Salaire décembre,500000,VIREMENT,Payé,SAL-2025-1202
+10/12/2025,Coach,Séances de décembre,300000,VIREMENT,En attente,FACT-2025-1203
+15/12/2025,Autre,Achats fournitures nettoyage,25000,ESPÈCES,Payé,FOURN-2025-1201
+20/12/2025,Autre,Entretien matériel,75000,VIREMENT,Payé,ENT-2025-1201

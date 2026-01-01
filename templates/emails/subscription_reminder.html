@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Rappel - Renouvellement d'abonnement - {{ site_name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 20px 0; }
+        .logo { max-width: 200px; height: auto; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #777; }
+        .button { 
+            display: inline-block; 
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 10px 20px; 
+            text-decoration: none; 
+            border-radius: 4px; 
+            margin: 15px 0;
+        }
+        .alert {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ISBISPORTCLUB</h1>
+        <h2>Rappel de renouvellement</h2>
+    </div>
+    
+    <div class="content">
+        <p>Bonjour {{ member.first_name }},</p>
+        
+        <div class="alert">
+            <h3 style="margin-top: 0; color: #856404;">Votre abonnement arrive à échéance bientôt !</h3>
+            <p>Votre abonnement actuel se termine le <strong>{{ subscription.end_date|date:"d/m/Y" }}</strong>.</p>
+        </div>
+        
+        <p>Pour éviter toute interruption de service, nous vous invitons à le renouveler dès que possible.</p>
+        
+        <h3>Détails de votre abonnement actuel :</h3>
+        <ul>
+            <li><strong>Type d'abonnement :</strong> {{ subscription.type }}</li>
+            <li><strong>Date de début :</strong> {{ subscription.start_date|date:"d/m/Y" }}</li>
+            <li><strong>Date de fin :</strong> {{ subscription.end_date|date:"d/m/Y" }}</li>
+            <li><strong>Jours restants :</strong> {{ subscription.days_remaining }} jour(s)</li>
+        </ul>
+        
+        <div style="text-align: center; margin: 25px 0;">
+            <a href="{{ renew_url }}" class="button">Renouveler mon abonnement</a>
+        </div>
+        
+        <p>Méthodes de paiement acceptées :</p>
+        <ul>
+            <li>Orange Money</li>
+            <li>Wave</li>
+            <li>Espèces à la réception</li>
+        </ul>
+        
+        <p>Pour toute question, n'hésitez pas à nous contacter à l'adresse {{ support_email }} ou au {{ support_phone }}.</p>
+        
+        <p>Cordialement,<br>L'équipe ISBISPORTCLUB</p>
+    </div>
+    
+    <div class="footer">
+        <p>© {% now "Y" %} ISBISPORTCLUB. Tous droits réservés.</p>
+        <p>Ceci est un message automatique, merci de ne pas y répondre.</p>
+        <p>Si vous ne souhaitez plus recevoir ces rappels, vous pouvez <a href="{{ unsubscribe_url }}">vous désabonner</a>.</p>
+    </div>
+</body>
+</html>

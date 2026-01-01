@@ -1,0 +1,32 @@
+# Fichiers de configuration locaux
+.env
+*.env
+
+# Fichiers de base de données
+*.db
+*.sqlite3
+*.sqlite
+
+# Fichiers de cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Fichiers de configuration Python
+*.cfg
+.venv
+venv/
+ENV/
+
+# Fichiers de développement
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Fichiers de logs
+*.log
+
+# Fichiers système
+.DS_Store
+Thumbs.db

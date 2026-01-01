@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Paiement reçu - {{ site_name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 20px 0; }
+        .logo { max-width: 200px; height: auto; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 5px; }
+        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #777; }
+        .button { 
+            display: inline-block; 
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 10px 20px; 
+            text-decoration: none; 
+            border-radius: 4px; 
+            margin: 15px 0;
+        }
+        .receipt {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        .receipt h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ISBISPORTCLUB</h1>
+        <h2>Reçu de paiement</h2>
+    </div>
+    
+    <div class="content">
+        <p>Bonjour {{ member.first_name }},</p>
+        
+        <p>Nous vous remercions pour votre paiement. Voici les détails de votre transaction :</p>
+        
+        <div class="receipt">
+            <h3>Détails du paiement</h3>
+            <p><strong>Référence :</strong> {{ payment.reference }}</p>
+            <p><strong>Date :</strong> {{ payment.date|date:"d/m/Y H:i" }}</p>
+            <p><strong>Montant :</strong> {{ payment.amount }} {{ payment.currency }}</p>
+            <p><strong>Méthode de paiement :</strong> {{ payment.method }}</p>
+            <p><strong>Type d'abonnement :</strong> {{ payment.subscription_type }}</p>
+            <p><strong>Période :</strong> Du {{ payment.start_date|date:"d/m/Y" }} au {{ payment.end_date|date:"d/m/Y" }}</p>
+            
+            {% if payment.qr_code %}
+            <div style="text-align: center; margin: 20px 0;">
+                <p>Présentez ce QR code à la réception :</p>
+                <img src="{{ payment.qr_code }}" alt="QR Code de paiement" style="max-width: 200px;">
+            </div>
+            {% endif %}
+        </div>
+        
+        <p>Pour toute question concernant ce paiement, n'hésitez pas à nous contacter à l'adresse {{ support_email }}.</p>
+        
+        <p>Cordialement,<br>L'équipe ISBISPORTCLUB</p>
+    </div>
+    
+    <div class="footer">
+        <p>© {% now "Y" %} ISBISPORTCLUB. Tous droits réservés.</p>
+        <p>Ceci est un message automatique, merci de ne pas y répondre.</p>
+    </div>
+</body>
+</html>
