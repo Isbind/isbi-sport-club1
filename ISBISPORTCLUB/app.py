@@ -861,7 +861,13 @@ if authentication_status:
                 json.dumps(adherent.get('details_paiement', {})) if isinstance(adherent.get('details_paiement'), dict) else adherent.get('details_paiement')
             ))
             conn.commit()
-
+            return True, "Adhérent ajouté avec succès"
+            
+        def ajouter_seance(conn, seance):
+            c = conn.cursor()
+            seance_id = str(uuid.uuid4())
+            c.execute('''
+                INSERT INTO seances (id, jour_semaine, heure_debut, heure_fin, type_seance,
                                   capacite_max, coach, description, statut)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (seance_id, seance['jour_semaine'], seance['heure_debut'], 

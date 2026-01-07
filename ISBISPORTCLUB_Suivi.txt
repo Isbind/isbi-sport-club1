@@ -1,0 +1,25 @@
+STRUCTURE DU FICHIER EXCEL - ISBISPORTCLUB
+
+1. ONGLET "MEMBRES"
+ID | Nom | Prénom | Date de naissance | Téléphone | Email | Date d'inscription | Statut
+
+2. ONGLET "ABONNEMENTS"
+ID Membre | Type d'abonnement | Date début | Date fin | Prix | Statut
+
+3. ONGLET "PAIEMENTS"
+N° Paiement | ID Membre | Date | Montant | Méthode | Statut | Notes
+
+4. ONGLET "PRÉSENCES"
+Date | ID Membre | Heure d'arrivée | Heure de départ | Durée | Coach
+
+INSTRUCTIONS D'UTILISATION :
+1. Créez un nouveau classeur Excel
+2. Créez 4 onglets avec les noms indiqués ci-dessus
+3. Copiez les en-têtes de colonnes pour chaque onglet
+4. Enregistrez le fichier sous le nom "ISBISPORTCLUB_Suivi.xlsx"
+
+ASTUCES :
+- Utilisez la mise en forme conditionnelle pour les dates d'expiration
+- Créez des tableaux Excel pour faciliter le tri et le filtrage
+- Ajoutez des validations de données pour les champs comme le type d'abonnement
+- Protégez les cellules de formules pour éviter les modifications accidentelles

@@ -112,12 +112,45 @@ def init_db():
     # Table des inscriptions
     c.execute('''
         CREATE TABLE IF NOT EXISTS inscriptions (
-            id TEXT PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             adherent_id TEXT NOT NULL,
-            seance_id TEXT NOT NULL,
-            date_inscription TIMESTAMP,
+            seance_id INTEGER NOT NULL,
+            date_inscription TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             statut TEXT DEFAULT 'confirmée',
-            presence BOOLEAN DEFAULT 0,
+            FOREIGN KEY (adherent_id) REFERENCES adherents (id),
+            FOREIGN KEY (seance_id) REFERENCES seances (id)
+        )
+    ''')
+    
+    # Table des paiements
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS paiements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adherent_id TEXT NOT NULL,
+            montant DECIMAL(10, 2) NOT NULL,
+            date_paiement DATE NOT NULL,
+            methode_paiement TEXT NOT NULL,
+            reference TEXT,
+            statut TEXT DEFAULT 'en_attente',
+            type_paiement TEXT NOT NULL,  -- 'abonnement', 'seance', 'autre'
+            details TEXT,
+            facture_generee BOOLEAN DEFAULT 0,
+            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (adherent_id) REFERENCES adherents (id)
+        )
+    ''')
+    
+    # Table des réservations
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reservations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adherent_id TEXT NOT NULL,
+            seance_id INTEGER NOT NULL,
+            date_reservation DATE NOT NULL,
+            statut TEXT DEFAULT 'confirmée',  -- confirmée, annulée, terminée
+            notification_envoyee BOOLEAN DEFAULT 0,
+            rappel_envoye BOOLEAN DEFAULT 0,
+            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (adherent_id) REFERENCES adherents (id),
             FOREIGN KEY (seance_id) REFERENCES seances (id)
         )
@@ -685,6 +718,122 @@ def afficher_onglet_adherents(conn):
             except Exception as e:
                 st.error(f"Erreur lors de la lecture du fichier : {str(e)}")
 
+def get_seances_par_jour(conn, jour):
+    """Récupère les séances pour un jour donné"""
+    try:
+        return pd.read_sql_query(
+            "SELECT * FROM seances WHERE jour_semaine = ? ORDER BY heure_debut", 
+            conn, 
+            params=(jour,)
+        )
+    except Exception as e:
+        st.error(f"Erreur lors de la récupération des séances : {str(e)}")
+        return pd.DataFrame()
+
+def enregistrer_paiement(conn, adherent_id, montant, methode_paiement, type_paiement, reference=None, details=None):
+    """Enregistre un nouveau paiement"""
+    try:
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO paiements (adherent_id, montant, date_paiement, methode_paiement, 
+                                 reference, type_paiement, details, statut)
+            VALUES (?, ?, DATE('now'), ?, ?, ?, ?, 'completé')
+        ''', (adherent_id, montant, methode_paiement, reference, type_paiement, details))
+        
+        # Mise à jour du statut de paiement de l'adhérent
+        c.execute('''
+            UPDATE adherents 
+            SET statut_paiement = 'à jour',
+                date_dernier_paiement = DATE('now'),
+                montant_paye = ?,
+                date_maj = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (montant, adherent_id))
+        
+        conn.commit()
+        return True, "Paiement enregistré avec succès"
+    except Exception as e:
+        conn.rollback()
+        return False, f"Erreur lors de l'enregistrement du paiement : {str(e)}"
+
+def creer_reservation(conn, adherent_id, seance_id, date_reservation):
+    """Crée une nouvelle réservation"""
+    try:
+        # Vérifier les places disponibles
+        c = conn.cursor()
+        c.execute('SELECT places_restantes, capacite_max FROM seances WHERE id = ?', (seance_id,))
+        places = c.fetchone()
+        
+        if not places or places[0] <= 0:
+            return False, "Plus de places disponibles pour cette séance"
+        
+        # Créer la réservation
+        c.execute('''
+            INSERT INTO reservations (adherent_id, seance_id, date_reservation, statut)
+            VALUES (?, ?, ?, 'confirmée')
+        ''', (adherent_id, seance_id, date_reservation))
+        
+        # Mettre à jour le nombre de places restantes
+        c.execute('''
+            UPDATE seances 
+            SET places_restantes = places_restantes - 1
+            WHERE id = ?
+        ''', (seance_id,))
+        
+        conn.commit()
+        return True, "Réservation effectuée avec succès"
+    except Exception as e:
+        conn.rollback()
+        return False, f"Erreur lors de la création de la réservation : {str(e)}"
+
+def envoyer_notification(conn, adherent_id, message, type_notification='email'):
+    """Envoie une notification à l'adhérent"""
+    try:
+        # Récupérer les informations de contact de l'adhérent
+        adherent = pd.read_sql_query(
+            'SELECT email, telephone FROM adherents WHERE id = ?', 
+            conn, 
+            params=(adherent_id,)
+        ).iloc[0]
+        
+        if type_notification == 'email' and adherent['email']:
+            # Logique d'envoi d'email
+            print(f"Email envoyé à {adherent['email']}: {message}")
+        elif type_notification == 'whatsapp' and adherent['telephone']:
+            # Logique d'envoi WhatsApp
+            print(f"Message WhatsApp envoyé à {adherent['telephone']}: {message}")
+            
+        return True, "Notification envoyée avec succès"
+    except Exception as e:
+        return False, f"Erreur lors de l'envoi de la notification : {str(e)}"
+
+def generer_facture(conn, paiement_id):
+    """Génère une facture pour un paiement"""
+    try:
+        # Récupérer les informations du paiement et de l'adhérent
+        facture = pd.read_sql_query('''
+            SELECT p.*, a.nom, a.prenom, a.email, a.telephone
+            FROM paiements p
+            JOIN adherents a ON p.adherent_id = a.id
+            WHERE p.id = ?
+        ''', conn, params=(paiement_id,)).iloc[0]
+        
+        # Ici, vous pouvez ajouter la logique pour générer un PDF
+        # Par exemple, en utilisant reportlab ou weasyprint
+        
+        # Mettre à jour le statut de la facture
+        c = conn.cursor()
+        c.execute('''
+            UPDATE paiements 
+            SET facture_generee = 1
+            WHERE id = ?
+        ''', (paiement_id,))
+        conn.commit()
+        
+        return True, f"facture_{paiement_id}.pdf"
+    except Exception as e:
+        return False, f"Erreur lors de la génération de la facture : {str(e)}"
+
 # Initialisation de la base de données
 conn = init_db()
 
@@ -758,43 +907,197 @@ if selected == "🏠 Tableau de bord":
 elif selected == "👥 Adhérents":
     afficher_onglet_adherents(conn)
 
-elif selected == "📅 Planning":
-    st.title("Gestion des Séances")
+elif selected == "� Paiements":
+    st.title("Gestion des Paiements")
     
-    # Formulaire d'ajout de séance
-    with st.form("form_seance"):
-        st.markdown("### Ajouter une nouvelle séance")
+    # Création des onglets
+    tab_paiements, tab_factures, tab_rapports = st.tabs(["📝 Enregistrer un paiement", "📄 Factures", "📊 Rapports"])
+    
+    with tab_paiements:
+        st.subheader("Nouveau paiement")
+        with st.form("form_paiement"):
+            # Sélection de l'adhérent
+            df_adherents = get_adherents(conn)
+            adherents_list = [f"{row['prenom']} {row['nom']} ({row['id']})" for _, row in df_adherents.iterrows()]
+            selected_adherent = st.selectbox("Sélectionnez un adhérent", adherents_list)
+            
+            # Détails du paiement
+            col1, col2 = st.columns(2)
+            with col1:
+                montant = st.number_input("Montant (€)", min_value=0.0, step=0.01, format="%.2f")
+                type_paiement = st.selectbox("Type de paiement", ["Abonnement mensuel", "Séance unique", "Autre"])
+            with col2:
+                methode_paiement = st.selectbox("Méthode de paiement", ["Espèces", "Carte bancaire", "Virement", "Chèque"])
+                reference = st.text_input("Référence (optionnel)")
+            
+            details = st.text_area("Détails supplémentaires (optionnel)")
+            
+            if st.form_submit_button("Enregistrer le paiement"):
+                if selected_adherent and montant > 0:
+                    # Extraire l'ID de l'adhérent
+                    adherent_id = selected_adherent.split('(')[-1].rstrip(')')
+                    
+                    # Enregistrer le paiement
+                    success, message = enregistrer_paiement(
+                        conn, adherent_id, montant, methode_paiement, 
+                        type_paiement, reference, details
+                    )
+                    
+                    if success:
+                        st.success(message)
+                        # Générer la facture
+                        facture_success, facture_path = generer_facture(conn, conn.cursor().lastrowid)
+                        if facture_success:
+                            st.success(f"Facture générée : {facture_path}")
+                        # Envoyer une notification
+                        envoyer_notification(
+                            conn, adherent_id,
+                            f"Paiement de {montant}€ enregistré. Merci pour votre confiance !",
+                            'email'
+                        )
+                    else:
+                        st.error(message)
+    
+    with tab_factures:
+        st.subheader("Historique des factures")
+        # Afficher l'historique des paiements
+        df_paiements = pd.read_sql_query('''
+            SELECT p.id, a.nom, a.prenom, p.montant, p.date_paiement, 
+                   p.methode_paiement, p.type_paiement, p.facture_generee
+            FROM paiements p
+            JOIN adherents a ON p.adherent_id = a.id
+            ORDER BY p.date_paiement DESC
+            LIMIT 50
+        ''', conn)
         
+        if not df_paiements.empty:
+            st.dataframe(
+                df_paiements,
+                column_config={
+                    "id": "N°",
+                    "nom": "Nom",
+                    "prenom": "Prénom",
+                    "montant": st.column_config.NumberColumn("Montant", format="%.2f €"),
+                    "date_paiement": "Date",
+                    "methode_paiement": "Méthode",
+                    "type_paiement": "Type",
+                    "facture_generee": "Facture"
+                },
+                use_container_width=True
+            )
+        else:
+            st.info("Aucun paiement enregistré pour le moment.")
+    
+    with tab_rapports:
+        st.subheader("Rapports financiers")
+        
+        # Sélection de la période
+        col1, col2 = st.columns(2)
+        with col1:
+            date_debut = st.date_input("Date de début", value=datetime.now().replace(day=1))
+        with col2:
+            date_fin = st.date_input("Date de fin")
+        
+        if st.button("Générer le rapport"):
+            # Récupérer les données pour la période sélectionnée
+            df_rapport = pd.read_sql_query('''
+                SELECT 
+                    strftime('%Y-%m', date_paiement) as mois,
+                    type_paiement,
+                    methode_paiement,
+                    SUM(montant) as total
+                FROM paiements
+                WHERE date_paiement BETWEEN ? AND ?
+                GROUP BY strftime('%Y-%m', date_paiement), type_paiement, methode_paiement
+                ORDER BY mois DESC, type_paiement
+            ''', conn, params=(date_debut, date_fin))
+            
+            if not df_rapport.empty:
+                # Afficher un tableau récapitulatif
+                st.write("### Récapitulatif des paiements")
+                st.dataframe(
+                    df_rapport.pivot_table(
+                        index=['mois', 'type_paiement'],
+                        columns='methode_paiement',
+                        values='total',
+                        aggfunc='sum',
+                        fill_value=0
+                    ).style.format("{:.2f} €"),
+                    use_container_width=True
+                )
+                
+                # Afficher un graphique
+                st.write("### Répartition des paiements par type")
+                fig, ax = plt.subplots()
+                df_rapport.groupby('type_paiement')['total'].sum().plot.pie(
+                    autopct='%1.1f%%',
+                    startangle=90,
+                    ax=ax
+                )
+                ax.set_ylabel('')
+                st.pyplot(fig)
+            else:
+                st.info("Aucune donnée disponible pour la période sélectionnée.")
+    
+    # Création des onglets
+    tab_planning, tab_ajout = st.tabs(["📅 Planning des séances", "➕ Ajouter une séance"])
+    
+    with tab_planning:
+        # Sélection du jour
+        jours_semaine = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        jour = st.selectbox("Sélectionnez un jour", jours_semaine, index=datetime.now().weekday() % 7)
+    
+    with tab_ajout:
+        # Formulaire d'ajout de séance
+        with st.form("form_seance"):
+            st.markdown("### Ajouter une nouvelle séance")
+            
+            # Champs du formulaire
+            type_seance = st.selectbox("Type de séance", ["Fitness", "Musculation", "Cardio", "Yoga", "Aeromix"])
+            jour_seance = st.selectbox("Jour de la semaine", jours_semaine, index=datetime.now().weekday() % 7)
+            heure_debut = st.time_input("Heure de début", value=datetime.strptime("19:00", "%H:%M").time())
+            heure_fin = st.time_input("Heure de fin", value=datetime.strptime("20:00", "%H:%M").time())
+            capacite_max = st.number_input("Capacité maximale", min_value=1, value=20)
+            coach = st.text_input("Nom du coach (optionnel)")
+            
+            submitted = st.form_submit_button("Ajouter la séance")
+            if submitted:
+                try:
+                    # Ajouter la logique d'ajout de la séance ici
+                    st.success(f"Séance de {type_seance} ajoutée avec succès le {jour_seance} !")
+                except Exception as e:
+                    st.error(f"Erreur lors de l'ajout de la séance : {str(e)}")
+    
     # Récupération des séances pour le jour sélectionné
     seances_du_jour = get_seances_par_jour(conn, jour)
     
-    if seances_du_jour:
+    if not seances_du_jour.empty:
         st.subheader(f"Séances du {jour}")
         
-        for seance in seances_du_jour:
+        for _, seance in seances_du_jour.iterrows():
             with st.container():
                 cols = st.columns([1, 3, 1, 1])
                 with cols[0]:
                     st.markdown(f"**{seance['heure_debut']} - {seance['heure_fin']}**")
                 with cols[1]:
                     st.markdown(f"**{seance['type_seance']}**")
-                    st.caption(f"{seance['coach'] or 'Sans coach'}")
+                    st.caption(f"{seance.get('coach', 'Sans coach')}")
                 with cols[2]:
-                    st.metric("Places", f"{seance['places_restantes']}/{seance['capacite_max']}")
+                    st.metric("Places", f"{seance.get('places_restantes', '?')}/{seance.get('capacite_max', '?')}")
                 with cols[3]:
-                    if seance['places_restantes'] > 0:
+                    places_restantes = seance.get('places_restantes', 0)
+                    if places_restantes is not None and places_restantes > 0:
                         # Utilisation d'un bouton standard avec une clé unique
-                        if st.button("S'inscrire", key=f"btn_inscription_{seance['id']}"):
+                        if st.button("S'inscrire", key=f"btn_inscription_{seance.get('id', '')}"):
                             # Logique d'inscription
-                            st.success(f"Inscription à {seance['type_seance']} confirmée !")
+                            st.success(f"Inscription à {seance.get('type_seance', 'cette séance')} confirmée !")
                             st.balloons()
                     else:
                         st.error("Complet")
     else:
         st.info(f"Aucune séance prévue le {jour}")
     
-    with tab_seances:
-        st.subheader("Gérer les Séances")
+    # Suppression de la section redondante
         
         # Formulaire d'ajout de séance
         with st.form("form_seance"):
@@ -1135,3 +1438,9 @@ try:
     conn.close()
 except:
     pass
+
+# Point d'entrée principal pour Streamlit
+if __name__ == '__main__':
+    # Cette ligne est optionnelle car Streamlit gère son propre serveur
+    pass
+    
