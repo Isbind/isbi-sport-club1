@@ -2,6 +2,8 @@
 
 Bienvenue dans le système de gestion de la salle de sport ISBISPORTCLUB.
 
+[![CI](https://github.com/Isbind/isbi-sport-club1/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Isbind/isbi-sport-club1/actions/workflows/ci.yml)
+
 ## Structure des dossiers
 
 - `adherents/` : Fichiers des adhérents et leurs informations personnelles
