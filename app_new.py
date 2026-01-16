@@ -9,6 +9,20 @@ import io
 import sqlite3
 from dotenv import load_dotenv
 from streamlit_option_menu import option_menu
+from auth import init_auth_session, show_login_page, logout
+
+# Configuration de la page - DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT
+st.set_page_config(
+    page_title="ISBISPORTCLUB - Gestion",
+    page_icon="🏋️",
+    layout="wide"
+)
+
+# Vérifier l'authentification
+init_auth_session()
+if not st.session_state.authenticated:
+    show_login_page()
+    st.stop()
 
 # Constantes
 TYPES_ABONNEMENT = [
@@ -23,13 +37,6 @@ TYPES_ABONNEMENT = [
 STATUTS = ["Actif", "Inactif", "En attente"]
 
 METHODES_PAIEMENT = ["Espèces", "Orange Money", "Wave", "Virement bancaire"]
-
-# Configuration de la page - DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT
-st.set_page_config(
-    page_title="ISBISPORTCLUB - Gestion",
-    page_icon="🏋️",
-    layout="wide"
-)
 
 # Styles CSS personnalisés
 st.markdown("""
@@ -723,6 +730,9 @@ METHODES_PAIEMENT = ["Espèces", "Orange Money", "Wave", "Virement bancaire"]
 # Barre latérale avec le menu
 with st.sidebar:
     st.title("ISBISPORTCLUB")
+    st.caption(f"👤 Connecté : {st.session_state.username}")
+    st.divider()
+    
     menu_options = ["🏠 Tableau de bord", "👥 Adhérents", "📅 Planning", "💳 Paiements"]
     selected = option_menu(
         menu_title=None,
@@ -730,6 +740,10 @@ with st.sidebar:
         icons=None,
         default_index=0
     )
+    
+    st.divider()
+    if st.button("🔐 Se déconnecter", use_container_width=True):
+        logout()
 
 # Contenu principal
 if selected == "🏠 Tableau de bord":
