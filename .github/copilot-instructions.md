@@ -1,124 +1,223 @@
-# Instructions pour les agents Copilot
+# Instructions pour agents Copilot
 
-Objectif rapide
-- Aider un agent à être immédiatement productif sur ce dépôt Python/Streamlit pour la gestion d'un club sportif (ISBISPORTCLUB).
+## Vue d'ensemble
 
-Contexte global (big picture)
-- Application principale: interface Streamlit (interfaces : `app.py`, `app_new.py`).
-- Logique métier / paiements: `payment_service.py` (génération de références, QR codes, intégration Orange Money / Wave) et `paiements.py` (wrapper d'appel API et helpers Streamlit).
-- Configuration centralisée: `config.py` et `config.yaml` (valeurs comme `PAYMENT_CONFIG`, `PATHS`, templates d'emails).
-- Données persistantes: sqlite DB (fichiers `isbisport.db`/`isbisportclub.db`) et CSV dans dossiers `adherents/`, `abonnements/`, `factures/`, `seances/`.
-- Templates d'email: `templates/emails/*.html` (utilisés par `notifications.py`).
+**ISBISPORTCLUB** est une application Streamlit pour la gestion d'un club sportif en Afrique (Sénégal) avec support des paiements mobiles (Wave, Orange Money). Architecture : UI Streamlit → couche métier service → SQLite + CSVs.
 
-Points d'attention pour l'agent
-- Entrypoints: `app.py` et `app_new.py` sont des UIs Streamlit — toute modification doit préserver l'appel `st.set_page_config(...)` au tout début.
-- Base de données: code initie et altère le schéma SQLite au runtime (`init_db()` dans `app.py`/`app_new.py`) — respecter les migrations implicites (ajout de colonnes sécurisé par checks PRAGMA).
-- Paiements: interactions externes avec APIs (Wave, Orange Money). Ne pas hardcoder de clés API; utiliser `config.py` / `.env` et respecter les formats (`PAYMENT_CONFIG['wave']`, `PAYMENT_CONFIG['orange_money']`).
-- Fichiers statiques: QR codes et dossiers sont créés via `config.py` (`PATHS['qrcodes']`).
+## Architecture essentielle
 
-Conventions de code & patterns observés
-- Style: fonctions petites et focalisées (ex: `generate_payment_reference`, `generate_qr_code`, `process_payment`).
-- DB access: usage direct de `sqlite3` + pandas `read_sql_query` pour affichage. Préférer transactions explicites et rollback on exception.
-- UI: composants Streamlit modulaires — boutons de paiement via `afficher_boutons_paiement()` (dans `paiements.py`).
-- Notifications: `notifications.py` construit et envoie emails en utilisant les templates de `templates/emails/`.
+### Composants clés et flux de données
 
-Commandes utiles (dev local)
-- Activer l'environnement virtuel (exemple enregistré dans les terminaux du workspace):
+| Composant | Responsabilité | Détails |
+|-----------|----------------|---------|
+| `app_new.py` | Entrypoint UI + init DB | `st.set_page_config(...)` DOIT être la 1ère ligne |
+| `payment_service.py` | Paiements B2C multiprotocole | Classes `PaymentService` : génère références, QR, appelle APIs |
+| `paiements.py` | Glue UI ↔ APIs + enregistrement DB | `PaiementManager` pour initier paiements, `enregistrer_paiement()` pour persistance |
+| `config.py` | Config centralisée | `PAYMENT_CONFIG['wave'/'orange_money']`, `PATHS['qrcodes']`, `NOTIFICATION_CONFIG` |
+| `notifications.py` | Emails transactionnels | Templates HTML + logs d'envoi |
+
+**Flux paiement complet** : UI → `PaiementManager.initier_paiement_*()` → `PaymentService.process_*_payment()` → génère QR + appel API → `enregistrer_paiement()` → DB (table `paiements`) → webhook/callback pour confirmation.
+
+### Persistance
+
+- **SQLite** : `isbisport.db` — schéma : `adherents` (id, nom, prenom, telephone, email, statut, type_abonnement, date_inscription, montant_paye, statut_paiement, commentaires, etc.), `seances`, `inscriptions`, `paiements`.
+- **CSVs** : `adherents/*.csv`, `abonnements/*.csv`, `factures/*.csv`, `seances/*.csv` — chargement/export manuel.
+- **Migration runtime** : `init_db()` utilise `PRAGMA table_info(...)` pour vérifier colonnes, puis `ALTER TABLE ADD COLUMN` pour ajouts idempotents.
+
+## Patterns spécifiques au projet
+
+### Base de données
+```python
+# Idéal : transactions explicites avec rollback
+try:
+    c.execute("INSERT INTO adherents ...")
+    conn.commit()
+except Exception as e:
+    conn.rollback()
+    return False, f"Erreur : {str(e)}"
 ```
+
+### Paiements
+```python
+# Toujours via PAYMENT_CONFIG (ne jamais hardcoder clés)
+from config import PAYMENT_CONFIG
+api_key = PAYMENT_CONFIG['wave']['api_key']  # provient de .env
+
+# Service retourne dict {success: bool, reference: str, payment_url: str, ...}
+# pour testabilité facile avec mocks
+```
+
+### Tests
+- Moquent `requests.post` via `@patch('payment_service.requests.post')`
+- Patchent `PATHS['qrcodes']` avec `tmp_path` (voir `tests/test_payment_service.py`)
+- Exemple : `test_payment_service.py` démontre les pattern de mock
+
+### UI Streamlit
+- Affichage erreurs : `st.error(...)` pour messages utilisateur
+- Pages stateless : données via session state ou DB query
+- Composants modulaires : e.g., boutons paiement via `afficher_boutons_paiement()` dans `paiements.py`
+
+## Workflows dev
+
+### Installation & démarrage
+```bash
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-- Lancer l'UI Streamlit:
-```
 streamlit run app_new.py
-# ou
-streamlit run app.py
 ```
 
-Conventions de sécurité et configuration
-- Variables sensibles: utiliser `.env` et `config.py` — ne pas écrire de secrets dans le code. Exemple: `WAVE_API_KEY`, `ORANGE_MONEY_API_KEY`, `ADMIN_EMAIL_PASSWORD`.
-- Endpoints callback: `PAYMENT_CONFIG[...]['callback_url']` doit être défini dans l'environnement en production.
+### Tests
+```bash
+pytest tests/test_payment_service.py -q  # paiements
+pytest tests/                             # tous
+```
 
-Exemples concrets à suivre
-- Ajouter un nouveau mode de paiement: implémenter `process_<provider>_payment(...)` dans `payment_service.py`, ajouter la configuration dans `config.py` et appeler depuis `paiements.py`/UI.
-- Enregistrer un paiement: appeler `enregistrer_paiement(reference, montant, methode, statut)` (défini dans `paiements.py`) puis envoyer notification via `NotificationService`.
-- Modifier templates mails: éditer `templates/emails/payment_received.html` et s'assurer que `NOTIFICATION_CONFIG` dans `config.py` référence le bon chemin.
+### Tester callbacks (webhooks paiements) en local
+1. Exposer Streamlit : `ngrok http 8501`
+2. Mettre `CALLBACK_URL=https://<ngrok-url>/callback` dans `.env`
+3. Configurer Wave/Orange Money pour pointer sur `CALLBACK_URL`
 
-Tests et vérifications rapides
-- Il n'y a pas de suite de tests formelle; valider manuellement:
-  - activer `.venv`, installer dépendances
-  - lancer `streamlit run app_new.py` et vérifier la navigation
-  - tester le flux de paiement en mode simulateur (vérifier QR code généré dans `static/qrcodes`)
+## Secrets & variables d'environnement
 
-Que faire quand vous n'êtes pas sûr
-- Recherchez les usages dans le dépôt: exemples d'appel live se trouvent dans `app.py`/`app_new.py` et `paiements.py`.
-- Pour toute modification touchant aux paiements ou aux emails, demander validation manuelle (clés, URLs de callback, templates).
+**Jamais hardcoder** : `WAVE_API_KEY`, `ORANGE_MONEY_API_KEY`, `ADMIN_EMAIL_PASSWORD`, clés tokens.
+Utiliser `.env` + `config.py` (qui charge via `load_dotenv()`). Exemples :
+- `WAVE_API_KEY=sk_test_xxx` → `PAYMENT_CONFIG['wave']['api_key']`
+- `ORANGE_MONEY_MERCHANT_CODE=...` → `PAYMENT_CONFIG['orange_money']['merchant_code']`
 
-Demande de feedback
-- J'ai ajouté ces instructions à `.github/copilot-instructions.md`. Indiquez si vous voulez: plus d'exemples de patterns, règles de style supplémentaires, ou procédures CI/CD.
+## Fichiers prioritaires à lire
 
----
+1. `app_new.py` (900 lignes) : UI complète + `init_db()` + CRUD adhérents
+2. `config.py` (275 lignes) : `PAYMENT_CONFIG`, `PATHS`, `NOTIFICATION_CONFIG`
+3. `payment_service.py` (216 lignes) : `PaymentService` class avec `process_wave_payment()`, `process_orange_money_payment()`, `process_cash_payment()`, génération QR
+4. `paiements.py` (218 lignes) : `PaiementManager` + `enregistrer_paiement()` (glue DB)
 
-Sections détaillées (Paiements, Schéma DB, Déploiement, Exemples)
+## Conseils pour nouvelles features
 
-- Paiements (pratiques & tests)
-  - Variables d'environnement importantes (placer dans `.env`):
-    - `WAVE_API_KEY`, `WAVE_BUSINESS_ID`, `WAVE_CALLBACK_URL`
-    - `ORANGE_MONEY_API_KEY`, `ORANGE_MONEY_MERCHANT_CODE`, `ORANGE_MONEY_MERCHANT_KEY`, `ORANGE_MONEY_CALLBACK_URL`
-    - `CALLBACK_URL` (général)
-  - Flux attendu pour un paiement en ligne:
-    1. Générer une référence via `PaymentService.generate_payment_reference()`.
-    2. Initier le paiement via `PaymentService.process_payment(...)` ou `PaiementManager.initier_paiement_*`.
-    3. Stocker la tentative (table `paiements`) en `statut='en_attente'` puis vérifier via callback ou check API.
-    4. À la confirmation, appeler `enregistrer_paiement(...)` et `NotificationService.send_payment_confirmation(...)`.
-  - Fichiers et dossiers: les QR codes sont écrits dans `static/qrcodes` (voir `PATHS['qrcodes']` dans `config.py`).
-  - Tests manuels:
-    - Remplir `.env` avec des clés de test, lancer Streamlit:
-      ```bash
-      source .venv/bin/activate
-      streamlit run app_new.py
-      ```
-    - Depuis l'UI, utiliser `Payer avec Wave` / `Payer avec Orange Money`, cliquer sur le lien de paiement, puis `Vérifier le paiement`.
-  - Tests unitaires / mocks: pour éviter appels réels, mocker `requests.post` / `requests.get` (ex: `requests-mock` ou `unittest.mock`) dans `payment_service.py`.
+- **Ajouter provider paiement** : 1) créer `PaymentService.process_<provider>_payment()` retournant dict `{success, reference, payment_url}` 2) ajouter config dans `config.py` 3) exposer dans UI via `paiements.py`
+- **Migrer DB** : utiliser pattern `PRAGMA table_info(...) + ALTER TABLE ADD COLUMN` pour idempotence
+- **Modifier templates email** : valider `NOTIFICATION_CONFIG[<type>]['template']` pointe bien fichier HTML existant
+- **Tester API réseau** : moque `requests` (voir `test_payment_service.py`) — pas d'appels réels en tests
 
-- Schéma DB (tables clés et migration runtime)
-  - Tables principales observées:
-    - `adherents` (colonnes: `id, nom, prenom, telephone, email, statut, type_abonnement, date_inscription, date_fin_abonnement, methode_paiement, statut_paiement, montant_paye, date_dernier_paiement, commentaires, date_creation, date_maj`)
-    - `seances` (colonnes: `id, jour_semaine, type_seance, heure_debut, heure_fin, capacite_max, coach, description, statut, date_creation`)
-    - `inscriptions` (colonnes: `id, adherent_id, seance_id, date_inscription, statut, presence`)
-    - `paiements` (créée par `enregistrer_paiement`, colonnes: `reference, montant, methode, statut, date_creation`)
-  - Pattern de migration utilisé: `PRAGMA table_info(table)` puis `ALTER TABLE ADD COLUMN` si manquant (voir `init_db()` dans `app_new.py`).
-  - Bonnes pratiques spécifiques au projet: utiliser `conn.rollback()` sur exception, committer explicitement, garder les modifications de schéma minimales et idempotentes.
+## CI/CD & Déploiement
 
-- Déploiement & callbacks
-  - Les callbacks et URLs publiques doivent être configurées avec `CALLBACK_URL` et les clés `WAVE_CALLBACK_URL` / `ORANGE_MONEY_CALLBACK_URL` dans l'environnement.
-  - En production: exposer des endpoints HTTPS publics et vérifier les signatures/webhook tokens fournis par les fournisseurs.
-  - Tests locaux: utiliser `ngrok` pour exposer votre instance Streamlit lors de tests de callback:
-    ```bash
-    ngrok http 8501
-    ```
-  - Ne pas hardcoder les secrets; utilisez un gestionnaire de secrets ou variables d'environnement déployées par CI/CD.
+### GitHub Actions (`.github/workflows/ci.yml`)
+- Lance `pytest -q` sur chaque `push` vers `main` et PR
+- Matrice : Python 3.11
+- Cache pip pour performance
+- Ajouter étapes supplémentaires si lint/type checking nécessaire
 
-- Exemples de code rapides
-  - Ajouter un provider (template):
-    ```py
-    # dans payment_service.py
-    @classmethod
-    def process_myprovider_payment(cls, amount, phone, description=""):
-        config = PAYMENT_CONFIG['myprovider']
-        ref = cls.generate_payment_reference('MP')
-        # envoyer requête, générer QR si besoin
-        return {'success': True, 'reference': ref, 'payment_url': 'https://...'}
-    # et dans process_payment: ajouter un cas `elif payment_method=='myprovider'`.
-    ```
-  - Test rapide sans UI:
-    ```bash
-    python - <<'PY'
-    from payment_service import PaymentService
-    print(PaymentService.process_cash_payment(1000, 'test'))
-    PY
-    ```
+### Options déploiement
+| Plateforme | Commande / Config | Secrets | Persistance |
+|-----------|------------------|---------|------------|
+| **Streamlit Cloud** | Connecter repo → `app_new.py` | Via "Secrets" UI | SQLite dans `/tmp` (limité) |
+| **Render** | Build: `pip install -r requirements.txt` / Run: `streamlit run app_new.py --server.port $PORT --server.address 0.0.0.0 --server.headless true` | Env vars dans dashboard | Disque persistant ou DB géré |
+| **Heroku** | Procfile fourni | Config Vars | Disque éphémère — migration vers PostgreSQL recommandée |
+| **Docker (local/VPS)** | `docker-compose up --build` charge `.env` | `.env` (fichier local) | Bind mount ou volume |
 
-Notes finales
-- Les changements qui touchent aux paiements ou notifications nécessitent une validation manuelle (clés, endpoints, templates). Si vous voulez, j'ajoute un petit ensemble de tests unitaires et un exemple `.env.example`.
+**Note production** : SQLite sur Streamlit Cloud n'est pas persistant. Pour production, migrer vers PostgreSQL via `DB_URL` et adapter code SQLite → SQLAlchemy.
+
+## Secrets & Déploiement
+
+### `.env` local (jamais committer)
+```bash
+WAVE_API_KEY=sk_test_xxx
+WAVE_BUSINESS_ID=biz_xxx
+ORANGE_MONEY_API_KEY=om_test_xxx
+ORANGE_MONEY_MERCHANT_CODE=merchant_xxx
+ORANGE_MONEY_MERCHANT_KEY=key_xxx
+ADMIN_EMAIL_PASSWORD=app_password_gmail
+CALLBACK_URL=https://votresite.com/callback  # Production uniquement
+```
+
+### Procédure déploiement sécurisé
+1. **GitHub Secrets** (repo Settings → Secrets) pour CI/CD
+2. **PaaS Env Vars** (Render/Heroku dashboards) : jamais dans code
+3. **Docker** : créer `.env.production` localement, NE PAS committer
+4. Exemple `.env.example` : committer template sans valeurs
+```bash
+WAVE_API_KEY=sk_test_
+ORANGE_MONEY_API_KEY=om_test_
+ADMIN_EMAIL_PASSWORD=
+CALLBACK_URL=https://your-app-url.com/callback
+```
+
+## Intégration API & Webhooks
+
+### Flux paiement avec callback
+```python
+# 1. Initiation (utilisateur click → PaymentService)
+ref = PaymentService.generate_payment_reference('WAVE')
+result = PaymentService.process_wave_payment(
+    amount=15000, 
+    phone='221700000000', 
+    description='Abonnement mensuel'
+)
+# → {success: True, reference: ref, payment_url: checkout_url, ...}
+
+# 2. Redirection utilisateur → checkout_url (Wave/Orange)
+# → Utilisateur paie
+
+# 3. Callback webhook (entrant depuis API)
+# Dans app_new.py, créer endpoint FastAPI ou route pour:
+@app.post("/callback/wave")
+async def webhook_wave(request: Request):
+    payload = await request.json()
+    # Vérifier signature payload (sécurité critique)
+    # Récupérer reference depuis payload
+    # SELECT FROM paiements WHERE reference = ref
+    # UPDATE statut_paiement = 'Confirmé' + commit
+    # Envoyer email confirmation via notifications.py
+
+# 4. Configuration production
+# CALLBACK_URL=https://votreapp.com/callback/wave
+# Wave/Orange settings: webhook URL = CALLBACK_URL
+```
+
+### Migration DB (ajouter colonnes)
+```python
+# Pattern idempotent utilisé dans app_new.py:
+c.execute("PRAGMA table_info(adherents)")
+columns = [col[1] for col in c.fetchall()]
+
+if 'new_column' not in columns:
+    c.execute('ALTER TABLE adherents ADD COLUMN new_column TEXT DEFAULT NULL')
+    conn.commit()
+```
+
+### Export CSV / Excel
+Patterns existants dans `app_new.py` :
+```python
+# Import Excel
+df_import = pd.read_excel(fichier)
+for _, row in df_import.iterrows():
+    adherent = {'nom': row['Nom'], ...}
+    ajouter_adherent(conn, adherent)
+
+# Export (utiliser pour nouveaux exports)
+import io
+output = io.BytesIO()
+df.to_excel(output, index=False, engine='openpyxl')
+st.download_button(
+    label="Télécharger Excel",
+    data=output.getvalue(),
+    file_name="adherents.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+```
+
+### Tables & schéma
+- `adherents` : id, nom, prenom, telephone, email, statut, type_abonnement, date_inscription, date_fin_abonnement, montant_paye, statut_paiement, commentaires, etc.
+- `seances` : id, jour_semaine, type_seance, heure_debut, heure_fin, capacite_max, coach, description, statut
+- `inscriptions` : id, adherent_id (FK), seance_id (FK), date_inscription, statut, presence (booléen)
+- `paiements` : reference, adherent_id, montant, methode, statut, date_creation, date_confirmation
+
+## Limites & garde-fous
+
+- ❌ Ne jamais exécuter paiements réels en dev — utiliser clés test/sandbox
+- ❌ Ne pas stocker mots de passe/tokens dans Git
+- ❌ Callbacks/webhooks = logique critique — révision manuelle obligatoire avant déploiement
+- ❌ SQLite en production Streamlit Cloud est limité — utiliser PostgreSQL pour scalabilité
+- ✅ Secrets dans `.env` local + GitHub Secrets + PaaS env vars (jamais Code)
+- ✅ Tester webhooks localement avec ngrok + `CALLBACK_URL=https://<ngrok>.ngrok.io/callback`
+- ✅ Préférer petites fonctions ciblées plutôt que méthodes monolithes
 
