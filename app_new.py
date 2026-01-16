@@ -337,6 +337,18 @@ def get_seances(conn, jour_semaine=None):
     
     return pd.read_sql_query(query, conn, params=params)
 
+def get_seances_par_jour(conn, jour_semaine):
+    """Renvoie les séances du jour sous forme de liste de dictionnaires.
+
+    Ce wrapper assure un format itérable sûr pour l'affichage dans l'UI
+    (liste de dicts plutôt que DataFrame) et renvoie une liste vide si
+    aucune séance n'est trouvée.
+    """
+    df = get_seances(conn, jour_semaine)
+    if df is None or df.empty:
+        return []
+    return df.to_dict("records")
+
 def get_adherents(conn, filtre_nom="", filtre_statut="", filtre_abonnement=""):
     """Récupère les adhérents avec filtres optionnels"""
     query = """
@@ -761,10 +773,11 @@ elif selected == "👥 Adhérents":
 elif selected == "📅 Planning":
     st.title("Gestion des Séances")
     
-    # Formulaire d'ajout de séance
-    with st.form("form_seance"):
-        st.markdown("### Ajouter une nouvelle séance")
-        
+    # Choix du jour à afficher (par défaut jour courant)
+    jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+    default_index = datetime.now().weekday() if 0 <= datetime.now().weekday() <= 6 else 0
+    jour = st.selectbox("Jour", jours, index=default_index)
+
     # Récupération des séances pour le jour sélectionné
     seances_du_jour = get_seances_par_jour(conn, jour)
     
@@ -793,6 +806,8 @@ elif selected == "📅 Planning":
     else:
         st.info(f"Aucune séance prévue le {jour}")
     
+    # Container utilisé pour la gestion des séances (remplace tab UI manquant)
+    tab_seances = st.container()
     with tab_seances:
         st.subheader("Gérer les Séances")
         
@@ -874,261 +889,6 @@ elif selected == "📅 Planning":
         else:
             st.info("Aucune séance n'a été créée pour le moment.")
 
-def afficher_onglet_adherents(conn):
-    st.header("👥 Gestion des adhérents")
-    
-    # Création des onglets
-    tab1, tab2, tab3 = st.tabs(["📋 Liste des adhérents", "➕ Ajouter un adhérent", "📤 Importer des adhérents"])
-    
-    with tab1:
-        # Filtres
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            filtre_nom = st.text_input("Rechercher par nom ou prénom", "")
-        with col2:
-            filtre_statut = st.selectbox("Filtrer par statut", [""] + STATUTS)
-        with col3:
-            filtre_abonnement = st.selectbox(
-                "Filtrer par type d'abonnement",
-                [""] + TYPES_ABONNEMENT
-            )
-        
-        # Bouton pour réinitialiser les filtres
-        if st.button("Réinitialiser les filtres"):
-            filtre_nom = ""
-            filtre_statut = ""
-            filtre_abonnement = ""
-            st.rerun()
-        
-        # Récupération des adhérents avec filtres
-        df_adherents = get_adherents(conn, filtre_nom, filtre_statut, filtre_abonnement)
-        
-        # Affichage du tableau des adhérents
-        if not df_adherents.empty:
-            # Formatage des colonnes
-            df_display = df_adherents.copy()
-            df_display['date_inscription'] = pd.to_datetime(df_display['date_inscription']).dt.strftime('%d/%m/%Y')
-            df_display['date_fin_abonnement'] = pd.to_datetime(df_display['date_fin_abonnement']).dt.strftime('%d/%m/%Y')
-            
-            # Afficher le tableau avec des colonnes sélectionnées
-            st.dataframe(
-                df_display[['nom', 'prenom', 'telephone', 'email', 'statut', 'type_abonnement', 'date_fin_abonnement']],
-                column_config={
-                    "nom": "Nom",
-                    "prenom": "Prénom",
-                    "telephone": "Téléphone",
-                    "email": "Email",
-                    "statut": "Statut",
-                    "type_abonnement": "Type d'abonnement",
-                    "date_fin_abonnement": "Fin d'abonnement"
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            # Statistiques rapides
-            st.subheader("📊 Statistiques")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total adhérents", len(df_adherents))
-            with col2:
-                st.metric("Actifs", len(df_adherents[df_adherents['statut'] == 'Actif']))
-            with col3:
-                st.metric("Abonnements expirant ce mois", 
-                         len(df_adherents[pd.to_datetime(df_adherents['date_fin_abonnement']).dt.month == pd.Timestamp.now().month]))
-        else:
-            st.info("Aucun adhérent trouvé avec ces critères.")
-    
-    with tab2:
-        st.subheader("Nouvel adhérent")
-        st.markdown("---")
-        
-        with st.form("form_adherent", clear_on_submit=True):
-            # Section d'information
-            st.markdown("### Informations personnelles")
-            
-            # Première ligne
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                nom = st.text_input("Nom *", key="nom_input", placeholder="Entrez le nom")
-                prenom = st.text_input("Prénom *", key="prenom_input", placeholder="Entrez le prénom")
-                telephone = st.text_input("Téléphone *", key="tel_input", placeholder="771234567")
-            
-            with col2:
-                email = st.text_input("Email", key="email_input", placeholder="exemple@domaine.com")
-                
-                statut = st.selectbox(
-                    "Statut *",
-                    STATUTS,
-                    key="statut_select"
-                )
-                
-                type_abonnement = st.selectbox(
-                    "Type d'abonnement *",
-                    TYPES_ABONNEMENT,
-                    key="abonnement_select"
-                )
-                
-                # Calcul du montant et de la date de fin
-                date_aujourdhui = datetime.now().date()
-                montant = 0
-                
-                if "Mensuel (15,000 XOF)" in type_abonnement:
-                    montant = 15000
-                    date_fin = date_aujourdhui + timedelta(days=30)
-                elif "Mensuel (20,000 XOF)" in type_abonnement:
-                    montant = 20000
-                    date_fin = date_aujourdhui + timedelta(days=30)
-                elif "Trimestriel" in type_abonnement:
-                    montant = 40000
-                    date_fin = date_aujourdhui + timedelta(weeks=12)  # 3 mois
-                elif "Annuel" in type_abonnement:
-                    montant = 120000
-                    date_fin = date_aujourdhui + timedelta(weeks=52)  # 1 an
-                else:  # Séance unique
-                    montant = 1000 if "1,000" in type_abonnement else 2000
-                    date_fin = date_aujourdhui
-                
-                # Affichage du montant et de la date de fin
-                st.write(f"<div style='background-color: #f0f8ff; padding: 10px; border-radius: 5px;'>"
-                        f"<strong>Montant à payer :</strong> {montant:,} XOF<br>"
-                        f"<strong>Date de fin d'abonnement :</strong> {date_fin.strftime('%d/%m/%Y')}"
-                        "</div>", 
-                        unsafe_allow_html=True)
-                
-                # Champ caché pour la date de fin
-                date_fin_input = st.date_input(
-                    "Date de fin d'abonnement *", 
-                    value=date_fin,
-                    min_value=date_aujourdhui,
-                    key="date_input",
-                    disabled=True,
-                    label_visibility="collapsed"
-                )
-                
-                # Section de paiement
-                st.markdown("---")
-                st.subheader("💳 Paiement")
-                
-                # Sélection de la méthode de paiement
-                methode_paiement = st.radio(
-                    "Méthode de paiement *",
-                    METHODES_PAIEMENT,
-                    horizontal=True,
-                    key="methode_paiement_radio"
-                )
-                
-                statut_paiement = st.selectbox(
-                    "Statut du paiement *",
-                    ["Payé", "En attente", "Annulé"],
-                    key="statut_paiement_select"
-                )
-                
-                montant_paye = st.number_input(
-                    "Montant payé (XOF) *",
-                    min_value=0.0,
-                    value=float(montant),
-                    step=1000.0,
-                    key="montant_paye_input"
-                )
-                
-                commentaires = st.text_area("Commentaires", key="commentaires_area")
-            
-            # Bouton de soumission
-            submitted = st.form_submit_button("Enregistrer l'adhérent")
-            
-            if submitted:
-                # Validation des champs obligatoires
-                if not nom or not prenom or not telephone or not type_abonnement:
-                    st.error("Veuillez remplir tous les champs obligatoires (*).")
-                else:
-                    # Création du dictionnaire adhérent
-                    nouvel_adherent = {
-                        'id': str(uuid.uuid4()),
-                        'nom': nom,
-                        'prenom': prenom,
-                        'telephone': telephone,
-                        'email': email,
-                        'statut': statut,
-                        'type_abonnement': type_abonnement,
-                        'date_inscription': date_aujourdhui.strftime('%Y-%m-%d'),
-                        'date_fin_abonnement': date_fin_input.strftime('%Y-%m-%d'),
-                        'methode_paiement': methode_paiement,
-                        'statut_paiement': statut_paiement,
-                        'montant_paye': montant_paye,
-                        'date_dernier_paiement': date_aujourdhui.strftime('%Y-%m-%d'),
-                        'commentaires': commentaires
-                    }
-                    
-                    # Ajout de l'adhérent
-                    success, message = ajouter_adherent(conn, nouvel_adherent)
-                    
-                    if success:
-                        st.success(message)
-                        st.balloons()
-                    else:
-                        st.error(message)
-    
-    with tab3:
-        st.subheader("Importer des adhérents")
-        st.markdown("---")
-        
-        st.info("💡 Téléchargez un fichier Excel (.xlsx) contenant la liste des adhérents. "
-               "Assurez-vous que le fichier contient les colonnes suivantes : "
-               "Nom, Prénom, Téléphone, Email, Type d'abonnement, Statut, Méthode de paiement, Montant payé.")
-        
-        fichier = st.file_uploader("Choisir un fichier Excel", type=["xlsx"])
-        
-        if fichier is not None:
-            try:
-                # Lire le fichier Excel
-                df_import = pd.read_excel(fichier)
-                
-                # Aperçu des données
-                st.subheader("Aperçu des données à importer")
-                st.dataframe(df_import.head())
-                
-                # Bouton de confirmation d'importation
-                if st.button("Confirmer l'importation"):
-                    # Traitement des données et insertion dans la base de données
-                    succes = 0
-                    echecs = 0
-                    
-                    for _, row in df_import.iterrows():
-                        try:
-                            # Conversion des données
-                            adherent = {
-                                'id': str(uuid.uuid4()),
-                                'nom': str(row.get('Nom', '')).strip(),
-                                'prenom': str(row.get('Prénom', '')).strip(),
-                                'telephone': str(row.get('Téléphone', '')).strip(),
-                                'email': str(row.get('Email', '')).strip(),
-                                'statut': str(row.get('Statut', 'Actif')).strip(),
-                                'type_abonnement': str(row.get("Type d'abonnement", '')).strip(),
-                                'date_inscription': datetime.now().strftime('%Y-%m-%d'),
-                                'date_fin_abonnement': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),  # Par défaut 1 mois
-                                'methode_paiement': str(row.get('Méthode de paiement', 'Espèces')).strip(),
-                                'statut_paiement': 'Payé',
-                                'montant_paye': float(row.get('Montant payé', 0)),
-                                'date_dernier_paiement': datetime.now().strftime('%Y-%m-%d'),
-                                'commentaires': 'Importé depuis fichier Excel'
-                            }
-                            
-                            # Validation des champs obligatoires
-                            if adherent['nom'] and adherent['prenom'] and adherent['telephone']:
-                                ajouter_adherent(conn, adherent)
-                                succes += 1
-                            else:
-                                echecs += 1
-                        except Exception as e:
-                            echecs += 1
-                            continue
-                    
-                    st.success(f"Importation terminée : {succes} adhérent(s) importé(s) avec succès, {echecs} échec(s).")
-                    
-            except Exception as e:
-                st.error(f"Erreur lors de la lecture du fichier : {str(e)}")
 
 # Fermer la connexion à la base de données à la fin
 try:
