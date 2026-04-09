@@ -591,8 +591,8 @@ def afficher_onglet_adherents(conn):
                     value=date_fin,
                     min_value=date_aujourdhui,
                     key="date_input",
-                    disabled=True,
-                    label_visibility="collapsed"
+                    disabled=False,
+                    help="Date de fin automatiquement calculee selon le type d abonnement"
                 )
                 
                 # Section de paiement
@@ -1306,8 +1306,8 @@ def afficher_onglet_adherents(conn):
                     value=date_fin,
                     min_value=date_aujourdhui,
                     key="date_input",
-                    disabled=True,
-                    label_visibility="collapsed"
+                    disabled=False,
+                    help="Date de fin automatiquement calculee selon le type d abonnement"
                 )
                 
                 # Section de paiement
@@ -1440,7 +1440,15 @@ except:
     pass
 
 # Point d'entrée principal pour Streamlit
-if __name__ == '__main__':
-    # Cette ligne est optionnelle car Streamlit gère son propre serveur
+cd /Users/issandoye/CascadeProjects/windsurf-project
+echo "from ISBISPORTCLUB.app_new import main\n\nif __name__ == \"__main__\":\n    main()" > streamlit_app.py
+
+def main():
+    # Votre code principal ici
     pass
-    
+if __name__ == "__main__":
+    main()
+ from ISBISPORTCLUB.app_new import main
+if __name__ == "__main__":
+    main()
+       

@@ -1730,3 +1730,12 @@ st.sidebar.info("ISBISPORTCLUB - Tous droits réservés © 2025")
 
 # Pour exécuter l'application en local, utilisez la commande :
 # streamlit run app.py
+from ISBISPORTCLUB.app_new import main
+
+if __name__ == "__main__":
+    main()
+    # Avant la correction
+                                    capacite_max, coach, description, statut)
+                                   ^
+# Après correction
+capacite_max, coach, description, statut)
