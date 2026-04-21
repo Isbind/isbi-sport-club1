@@ -9,6 +9,7 @@ import io
 import sqlite3
 from dotenv import load_dotenv
 from streamlit_option_menu import option_menu
+from webhook_wave import creer_session_paiement_wave, afficher_notifications
 
 # Constantes
 TYPES_ABONNEMENT = [
@@ -631,21 +632,68 @@ def afficher_onglet_adherents(conn):
                 if not nom or not prenom or not telephone or not type_abonnement:
                     st.error("Veuillez remplir tous les champs obligatoires (*).")
                 else:
-                    # Création du dictionnaire adhérent
-                    nouvel_adherent = {
-                        'id': str(uuid.uuid4()),
-                        'nom': nom.upper(),
-                        'prenom': prenom.capitalize(),
-                        'telephone': telephone,
-                        'email': email,
-                        'statut': statut,
-                        'type_abonnement': type_abonnement,
-                        'date_inscription': date_aujourdhui.strftime('%Y-%m-%d'),
-                        'date_fin_abonnement': date_fin_input.strftime('%Y-%m-%d'),
-                        'methode_paiement': methode_paiement,
-                        'statut_paiement': statut_paiement,
-                        'montant_paye': montant_paye,
-                        'date_dernier_paiement': date_aujourdhui.strftime('%Y-%m-%d'),
+                    # Si paiement par Wave, créer une session de paiement
+                    if methode_paiement == "Wave":
+                        client_reference = f"adherent_{uuid.uuid4().hex[:8]}"
+                        paiement_result = creer_session_paiement_wave(
+                            montant=montant,
+                            description=f"Abonnement {type_abonnement} - {nom} {prenom}",
+                            client_reference=client_reference
+                        )
+                        
+                        if paiement_result['success']:
+                            st.success("🌊 Redirection vers le paiement Wave...")
+                            st.markdown(f"""
+                            <div style="text-align: center; padding: 20px;">
+                                <h3>🌊 Payer avec Wave</h3>
+                                <p>Cliquez sur le bouton ci-dessous pour finaliser votre paiement</p>
+                                <a href="{paiement_result['payment_url']}" target="_blank">
+                                    <button style="background-color: #00D4AA; color: white; padding: 12px 24px; 
+                                                   border: none; border-radius: 8px; font-size: 16px; 
+                                                   cursor: pointer; text-decoration: none;">
+                                        Payer avec Wave 🌊
+                                    </button>
+                                </a>
+                                <p><small>Reference: {client_reference}</small></p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Enregistrer l'adhérent avec statut "en attente"
+                            nouvel_adherent = {
+                                'id': str(uuid.uuid4()),
+                                'nom': nom.upper(),
+                                'prenom': prenom.capitalize(),
+                                'telephone': telephone,
+                                'email': email,
+                                'statut': 'En attente',
+                                'type_abonnement': type_abonnement,
+                                'date_inscription': date_aujourdhui.strftime('%Y-%m-%d'),
+                                'date_fin_abonnement': date_fin_input.strftime('%Y-%m-%d'),
+                                'methode_paiement': methode_paiement,
+                                'statut_paiement': 'En attente',
+                                'montant_paye': 0,
+                                'date_dernier_paiement': None,
+                                'commentaires': f"En attente de paiement Wave - Ref: {client_reference}"
+                            }
+                        else:
+                            st.error(f"❌ Erreur lors de la création du paiement Wave: {paiement_result['error']}")
+                            return
+                    else:
+                        # Pour les autres méthodes de paiement
+                        nouvel_adherent = {
+                            'id': str(uuid.uuid4()),
+                            'nom': nom.upper(),
+                            'prenom': prenom.capitalize(),
+                            'telephone': telephone,
+                            'email': email,
+                            'statut': statut,
+                            'type_abonnement': type_abonnement,
+                            'date_inscription': date_aujourdhui.strftime('%Y-%m-%d'),
+                            'date_fin_abonnement': date_fin_input.strftime('%Y-%m-%d'),
+                            'methode_paiement': methode_paiement,
+                            'statut_paiement': statut_paiement,
+                            'montant_paye': montant_paye,
+                            'date_dernier_paiement': date_aujourdhui.strftime('%Y-%m-%d'),
                         'commentaires': commentaires
                     }
                     
